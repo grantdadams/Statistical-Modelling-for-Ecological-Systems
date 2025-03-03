@@ -1,0 +1,3 @@
+"0","mod <- lm(log(peso_obs) ~ log(longitud))"
+"2","Error in eval(predvars, data, env) : object 'peso_obs' not found
+"

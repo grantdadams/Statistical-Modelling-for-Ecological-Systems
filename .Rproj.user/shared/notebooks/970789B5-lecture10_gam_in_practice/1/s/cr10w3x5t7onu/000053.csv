@@ -1,0 +1,1 @@
+"0","lines(xp, Xp %*% coef(mod.1), col = 2) # plot fitted spline"

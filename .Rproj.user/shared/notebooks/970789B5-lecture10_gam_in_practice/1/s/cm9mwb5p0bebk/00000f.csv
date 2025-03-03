@@ -1,0 +1,4 @@
+"0","gm.2 <- gam(CPUE ~ te(X, Y, k = c(20, 20)), data = haul_data_random, family = poisson, select = TRUE)"
+"2","Error in gam(CPUE ~ te(X, Y, k = c(20, 20)), data = haul_data_random,  : 
+  could not find function ""gam""
+"

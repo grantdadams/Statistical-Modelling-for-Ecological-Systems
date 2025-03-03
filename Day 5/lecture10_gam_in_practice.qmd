@@ -1,0 +1,326 @@
+---
+title: "lecture10_gam_in_practice"
+author: "Grant Adams"
+format: pptx
+editor: visual
+---
+
+# Background II
+
+In the simplest form a GAM is
+
+$$
+y_i = f(x_i) + \epsilon
+$$
+
+$$
+f(x_i) = \sum_{i=1}^q b_i(x_i) * \beta
+$$
+
+$f(x)$ = non-linear smooth function
+
+$b_i$ = basis function that when combined becomes $f(x)$
+
+$\beta$ = regression coefficient used to combine $b_i$
+
+------------------------------------------------------------------------
+
+# Polynomial basis (1)
+
+3rd order polynomial
+
+$b_1(x) = 1$, $b_2(x) = x$, $b_3(x) = x^2$, $b_4(x) = x^3$
+
+results in
+
+$$
+f(x) = \beta_1+x*\beta_2 + x^2 *\beta_3 + x^3 * \beta_4
+$$
+
+$$
+y_i = \beta_1+x_i*\beta_2 + x_i^2 *\beta_3 + x_i^3 * \beta_4 + \epsilon_i
+$$
+
+------------------------------------------------------------------------
+
+# Generate data
+
+Similar to a linear model??
+
+```{r, echo = TRUE}
+# Generate data
+size<-c(1.42,1.58,1.78,1.99,1.99,1.99,2.13,2.13,2.13, 2.32,2.32,2.32,2.32,2.32,2.43,2.43,2.78,2.98,2.98) 
+wear<-c(4.0,4.2,2.5,2.6,2.8,2.4,3.2,2.4,2.6,4.8,2.9, 3.8,3.0,2.7,3.1,3.3,3.0,2.8,1.7)
+x <- size - min(size)
+x <- x/max(x) 
+
+# Plot
+plot(x, wear, xlab = "Scaled engine size", ylab = "Wear index")
+```
+
+------------------------------------------------------------------------
+
+# Polynomial basis (2)
+
+Similar to a linear model??
+
+```{r, echo = TRUE}
+# Fit model
+mod <- lm(wear ~ x + I(x^2) + I(x^3))
+```
+
+------------------------------------------------------------------------
+
+# Plot polynomial basis
+
+```{r, echo = TRUE}
+# Get beta
+b1 = mod$coefficients[1]; b2 = mod$coefficients[2]; b3 = mod$coefficients[3]; b4 = mod$coefficients[4]; 
+
+# Plot
+plot(x, wear, xlab = "Scaled engine size", ylab = "Wear index")
+curve(b1 + x*b2 + x^2*b3 + x^3*b4, from = 0, to = 1, add = TRUE)
+```
+
+------------------------------------------------------------------------
+
+# Cubic spline basis
+
+$b_1(x) = 1$, $b_2(x) = x$
+
+$b_{i+2} = R(x, x^*_q)$
+
+$$
+R(x, x^*_q) = \left[\left(x^*_q - 1/2 \right)^2 - 1/12 \right]\left[\left(x - 1/2 \right)^2 - 1/12 \right]/4 - \left[\left(|{x-x^*_q}| - 1/2 \right)^4 - 1/2 \left(|{x-x^*_q}| - 1/2 \right)^2 + 7/240 \right]/24
+$$
+
+where $x_q^*$ is the location of $k$ knots along the range of $x$
+
+By default mgcv will select the locations based on quartiles or even location of $x$
+
+------------------------------------------------------------------------
+
+# Cubic spline basis in R by hand (1)
+
+```{r, echo = TRUE}
+rk<-function(x,z){ # R(x,x*) for cubic spline on [0,1] 
+  ((z-0.5)^2-1/12)*((x-0.5)^2-1/12)/4- ((abs(x-z)-0.5)^4-(abs(x-z)-0.5)^2/2+7/240)/24
+}
+
+spl.X <-function(x, xk){      # setup model matrix forcubic penalized regression spline 
+  q <- length(xk)+2           # number of parameters 
+  n <- length(x)              # number of data 
+  X <- matrix(1, n, q)        # initialized model matrix 
+  X[, 2] <-x                  # set second column to x
+  X[,3:q]<-outer(x,xk,FUN=rk) # and remaining to R(x,xk) 
+  X
+}
+```
+
+------------------------------------------------------------------------
+
+# Cubic spline basis in R by hand (2)
+
+```{r, echo = TRUE}
+xk <- 1:4/5               # choose location of 4 knots
+Xmat <- spl.X(x, xk)         # generate model matrix 
+mod.1 <- lm(wear ~ Xmat - 1) # fit model 
+xp <- 0:100 / 100         # x values for prediction 
+Xp <- spl.X(xp, xk)       # prediction matrix 
+
+# Plot
+plot(x, wear, xlab = "Scaled engine size", ylab = "Wear index")
+curve(b1 + x*b2 + x^2*b3 + x^3*b4, from = 0, to = 1, add = TRUE)
+lines(xp, Xp %*% coef(mod.1), col = 2) # plot fitted spline
+```
+
+------------------------------------------------------------------------
+
+# Cubic spline basis in R `mgcv`
+
+```{r, echo = TRUE}
+# Fit GAM
+library(mgcv)
+mod.2 <- gam(wear ~ s(x, k = 4, fx = F)) # fit model with 4 knots
+predy <- predict(mod.2, newdata = data.frame(x = xp), type = "response")
+
+# Plot
+plot(x, wear, xlab = "Scaled engine size", ylab = "Wear index")
+curve(b1 + x*b2 + x^2*b3 + x^3*b4, from = 0, to = 1, add = TRUE)
+lines(xp, Xp %*% coef(mod.1), col = 2) # plot fitted spline
+lines(xp, predy, col = 3) 
+```
+
+------------------------------------------------------------------------
+
+# Basis functions
+
+```{r, echo = TRUE}
+library(gratia)
+library(dplyr)
+basis(mod.2) %>%
+  draw()
+```
+
+------------------------------------------------------------------------
+
+# Basis functions
+
+Many different smooth terms!
+
+`bs = "cr"` for cubic splines
+
+`bs = "cs"` for cubic splines with shrinkage (eliminates uninformative covariates)
+
+`bs = cc` for cyclic regression spines where first and last value of $x$ match (season, day of the year, time of data)
+
+`bs = re` simple IID normal random effects
+
+------------------------------------------------------------------------
+
+# 1D models
+
+GAMs are great at approximating non-linear functions
+
+Remember our simulated survey data?
+
+```{r}
+get_density = function(depth,
+                       best_depth = -1000,
+                       DepthSigma = 1.5){
+  exp(-1 * ( log(depth/best_depth) )^2 / DepthSigma ^2)
+}
+curve(get_density(x), from = -5000, to = 0, xlab = "Depth", ylab = "Habitat suitability")
+
+```
+
+------------------------------------------------------------------------
+
+# 1D models
+
+GAMs can be used to fit to the survey data and approximate the curve:
+
+```{r, echo = TRUE}
+source("Simulate_Spatial_Data_No_Plots.R")
+
+library(mgcv)
+gm.1 <- gam(CPUE ~ s(Depth, k = 10) + as.factor(Year), data = haul_data, family = poisson, select = TRUE)
+
+```
+
+------------------------------------------------------------------------
+
+```{r, echo = TRUE}
+plot(gm.1)
+```
+
+------------------------------------------------------------------------
+
+# Diagnostics
+
+```{r, echo = TRUE}
+gam.check(gm.1)
+```
+
+----
+
+# Diagnostics
+
+```{r, echo = TRUE}
+plot(gm.1)
+```
+
+----
+
+# Plot partial smooths
+
+```{r, echo = TRUE}
+library(gratia)
+
+basis_weights <- smooth_coefs(gm.1, select = "s(Depth)")
+
+basis(gm.1) %>%
+  draw() 
+```
+
+------------------------------------------------------------------------
+
+# Spatial models
+
+GAMs are great for spatial modelling
+
+Using interactions
+
+------------------------------------------------------------------------
+
+# Simulated survey data
+
+```{r, echo = TRUE}
+gm.2 <- bam(CPUE ~ ti(X, Y, k = c(15, 15)), data = haul_data_random, family = poisson, select = TRUE)
+```
+
+------------------------------------------------------------------------
+
+```{r, echo = TRUE}
+# Predict distribution
+pred <- data.frame(X = polygony$X,
+                    Y = polygony$Y)
+pred$pred <- predict(gm.2, pred)
+
+# Plot
+polygony <- polygony %>%
+  dplyr::mutate(Pred = pred$pred)
+plot(polygony[c("depth", "habitat_suitability", "Pred")])
+```
+
+# Mackerel egg survey
+
+Borchers et al. (1997) sampled eggs of mackerel to understand their spatial distribution and relation to environmental predictors.
+
+```{r, echo = TRUE}
+library(gamair)
+data("mack")
+
+mack$log.net.area <- log(mack$net.area)
+
+gm <- gam(egg.count ~ s(lon, lat) + offset(log.net.area), data = mack, family = nb, control = gam.control(maxit=100))
+```
+
+------------------------------------------------------------------------
+
+```{r, echo = TRUE}
+# Coastline
+data("coast")
+
+# Predict distribution
+lon = seq(-15, -1, by = 0.25) # X
+lat = seq(44, 58, by = 0.25) # Y
+pred <- expand.grid(lon = lon,
+                    lat = lat)
+pred$log.net.area <- 0
+pred$pred <- predict(gm, pred)
+
+# Plot
+par(mar = c(3,3.5,1,0.5), mgp = c(2,1,0))
+image(lon, lat, matrix(pred$pred, 57, 57), cex.lab=1.5, cex.axis=1.4) 
+contour(lon, lat, matrix(pred$pred, 57, 57), add = TRUE) 
+lines(coast$lon, coast$lat, col=1)
+```
+
+# Problems?
+
+------------------------------------------------------------------------
+
+# Problems?
+
+Can use soap film smoothers to account for coastlines and islands
+
+`bs = "so"`
+
+----
+
+# Random effects approach
+
+Integrate over space for indices
+
+<https://pbs-assess.github.io/sdmTMB/>

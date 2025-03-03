@@ -1,0 +1,185 @@
+---
+title: "Index Standardization Overview"
+author: "Grant Adams"
+format: pptx
+editor: visual
+---
+
+# Index standardization
+
+Many fisheries rely on development of indices that track abundance or biomass under the assumption:
+
+$$
+I_y = q *N_y
+$$
+
+$I_y$ = annual index
+
+$q$ = catchability (fraction of population captured per unit effort)
+
+$N_y$ = Numbers or density
+
+------------------------------------------------------------------------
+
+# Sources of data
+
+Scientific surveys
+
+-   Surveys designed to limit variation in $q$
+-   Developed for highly valuable or important species (e.g. anchovy, pollock, whales)
+
+Fishery-dependent data
+
+-   $q$ is dependent on fishing behavior and fleet dynamics
+-   Surveys are not practical or expensive (e.g. tuna fisheries)
+
+------------------------------------------------------------------------
+
+# Common index models
+
+-   Generalized Linear Models (GLMs)
+
+-   Generalized Linear Mixed Models (GLMMs)
+
+-   Generalized Additive Models (GAMs)
+
+-   Generalized Additive Mixed Models (GAMMs)
+
+Model choice is often dependent on data-available and analyst
+
+------------------------------------------------------------------------
+
+# Fundamentals
+
+$$
+\mu_i=E(I_{i})
+$$
+
+$$
+g(\mu_i)= \text{X}_i * \beta
+$$
+
+$\mu_i$ = expected value
+
+$I_i$ = observed value $i$
+
+$g()$ = link function (log, logit, etc)
+
+$X_i$ = Explanatory variables (year, month, vessel, etc)
+
+$\beta$ = estimated parameters
+
+------------------------------------------------------------------------
+
+# Common distributions
+
+*Presence/absence*:
+
+-   Binomial (logit link function)
+
+*Numbers*:
+
+-   Poisson (log link function)
+
+-   Negative binomial (log link function)
+
+*Biomass*:
+
+-   Normal
+
+-   Gamma
+
+Many more!!
+
+------------------------------------------------------------------------
+
+# Common covariates $X$
+
+-   Year or time
+
+Factors that influence catchability:
+
+-   Vessel (some vessels may be more efficient/bigger nets)
+
+-   Time of day (fish move up and down the water column)
+
+-   Temperature (fish migrate into the survey area seasonally with temperature)
+
+------------------------------------------------------------------------
+
+# Implementation (1)
+
+Multiple R packages
+
+GLM: `stats`
+
+GLMM: `glmmTMB`, `lme4`, `nlme`
+
+GAM: `mgcv`
+
+GAMM: `mgcv`, `gamm4`
+
+------------------------------------------------------------------------
+
+# GLM implementation (2)
+
+```{r, echo = TRUE, eval = FALSE}
+mod = glm(CPUE ~ Year + Depth, data = mydata, family = poisson(link = "log"))
+```
+
+Distribution = `family`
+
+Link function $f()$ = `link`
+
+Covariates $X$ = `Year + Depth`
+
+------------------------------------------------------------------------
+
+# Diagnostics
+
+Standard regression diagnostics should be used such `plot(mod)`
+
+-   Residuals vs fitted values (model misspecification)
+
+-   Sqrt of abs of residuals vs expected values (variance correctly specified)
+
+-   QQplot (residuals normally distributed)
+
+-   Observed vs predicted
+
+------------------------------------------------------------------------
+
+# Good model diagnostics
+
+```{r}
+library(mgcv)
+set.seed(6)
+dat <- gamSim(1,n=2000,dist="poisson",scale=.1)
+
+## use "cr" basis to save time, with 2000 data...
+b2<-gam(y~s(x0,bs="cr")+s(x1,bs="cr")+s(x2,bs="cr")+
+            s(x3,bs="cr"),family=poisson,data=dat,method="REML")
+par(mfrow = c(2, 2), mar = c(3, 2, 1, 1))
+gam.check(b2)
+```
+
+------------------------------------------------------------------------
+
+# Wrong distribution
+
+```{r}
+## use "cr" basis to save time, with 2000 data...
+b3<-gam(y~s(x0,bs="cr")+s(x1,bs="cr")+s(x2,bs="cr")+
+            s(x3,bs="cr"),data=dat,method="REML")
+par(mfrow = c(2, 2), mar = c(3, 2, 1, 1))
+gam.check(b3)
+```
+
+# Missing predictors
+
+```{r}
+## use "cr" basis to save time, with 2000 data...
+b4<-gam(y~s(x0,bs="cr"),family = poisson, data=dat,method="REML")
+par(mfrow = c(2, 2), mar = c(3, 2, 1, 1))
+gam.check(b4)
+```

@@ -1,0 +1,5 @@
+Model fitting:
+  1. Model specification (distribution, predictors)
+2. Estimation
+3. Model validation (important for inference)
+4. Inference/prediction

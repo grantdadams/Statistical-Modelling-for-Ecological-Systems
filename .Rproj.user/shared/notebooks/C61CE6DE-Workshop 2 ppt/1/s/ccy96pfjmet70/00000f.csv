@@ -1,0 +1,6 @@
+"0","nobs = 500"
+"0","longitud <- runif(nobs, min = 5, max = 130)"
+"0","beta = 3"
+"0","alpha = 1e-05 # kg per cm^3"
+"0","log_peso <- log(alpha) + beta * log(longitud)"
+"0","peso = exp(log_peso)"

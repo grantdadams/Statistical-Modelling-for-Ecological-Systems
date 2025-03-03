@@ -1,0 +1,11 @@
+"0","# Fit GAM"
+"0","library(mgcv)"
+"2","Loading required package: nlme
+"
+"2","This is mgcv 1.9-1. For overview type 'help(""mgcv-package"")'.
+"
+"0","mod.2 <- gam(wear ~ s(x, k = 4, fx = F)) # fit model with 4 knots"
+"0","predy <- predict(mod.2, newdata = data.frame(x = xp), type = ""response"")"
+"0",""
+"0","# Plot"
+"0","plot(x, wear, xlab = ""Scaled engine size"", ylab = ""Wear index"")"

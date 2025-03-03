@@ -1,0 +1,296 @@
+---
+title: "Workshop 1"
+author: "Grant Adams"
+format: pptx
+editor: visual
+---
+
+# Base R
+
+Installing packages can be done using the `install.packages` function:
+
+```{r, eval=FALSE, echo = TRUE}
+install.packages("mgcv")
+```
+
+Reading data can be done using the `read.csv` function
+
+```{r, eval=FALSE, echo = TRUE}
+mydata <- read.csv("mack.csv")
+```
+
+Excel files can also be read in using the `readxl` package
+
+```{r, eval=FALSE, echo = TRUE}
+install.packages("readxl")
+library(readxl)
+readxl::read_xlsx("excelfile.xlsx")
+```
+
+# Simulating data
+
+# Normal distribution (1)
+
+The normal distribution is defined by
+
+$$
+p(x|\mu,\sigma) = \prod \frac{1}{\sqrt{2 \pi \sigma^2}}e^{-\frac{(x - \mu)^2}{2 \sigma^2}}
+$$
+
+where $x$ are the observations, $\mu$ is the mean, and $\sigma$ is the standard deviation. Data can be simulated from a normal distribution using `rnorm` and we can plot the distribution of data using the `hist` function.
+
+```{r, echo = TRUE}
+data <- rnorm(n = 100, mean = 6, sd = 1)
+hist(data)
+```
+
+------------------------------------------------------------------------
+
+# Normal distribution (2)
+
+The probability density (the thing we use to estimate parameters of a model) is specified by `dnorm`. We can see that the probability of getting 0 in the above distribution is very low compared to the probability of getting a 6:
+
+```{r, echo = TRUE}
+dnorm(0, mean = 6, sd = 1)
+dnorm(6, mean = 6, sd = 1)
+```
+
+------------------------------------------------------------------------
+
+# Normal distribution (3)
+
+we can use the curve function to plot the probability density:
+
+```{r, echo = TRUE}
+curve(dnorm(x, mean = 6, sd = 1), from = 0, to = 12)
+abline(v = 6, col = 2)
+
+# ~ 68% of probability
+abline(v = 5, col = 3)
+abline(v = 7, col = 3)
+
+
+# ~95% of probability
+abline(v = 4, col = 4)
+abline(v = 8, col = 4)
+```
+
+------------------------------------------------------------------------
+
+# Poisson distribution (1)
+
+The poisson distribution is used for count data (the number of k events in a unit of time/space). The values have to be \> 0 and is defined by the rate parameter $\lambda$:
+
+$$
+p(k|\lambda) = \frac{\lambda^ke^{-\lambda}}{!k}
+$$
+
+where $!$ is the factorial symbol `factorial(k)` in R. Simulating and density functions are the same as for the normal distribution. For example, lets say the mean density of fish is 10 per unit space/time and we take 100 independent hauls:
+
+```{r, echo = TRUE}
+data <- rpois(100, lambda = 10)
+hist(data)
+```
+
+------------------------------------------------------------------------
+
+# Poisson distribution (2)
+
+The probability of getting 14 fish is greater than the probability of getting 1.
+
+```{r, echo = TRUE}
+dpois(1, 10)
+dpois(14, 10)
+```
+
+------------------------------------------------------------------------
+
+# Binomial distribution (1)
+
+The binomial distribution is used for yes/no (1/0) data and is defined by the probability parameter $p$ and the number of events $n$ and the $k$ number of successes (1s):
+
+$$
+p(k|n,p)=\binom{n}{k} \cdot p^kq^{n-k}
+$$
+
+for example, lets say we want to simulate the number of heads when flipping a coin 10 times. We assume the the probability of getting a heads is %50 and $n$ = 10:
+
+```{r, echo = TRUE}
+data <- rbinom(10, size = 1, prob = 0.5)
+hist(data)
+```
+
+------------------------------------------------------------------------
+
+# Binomial distribution (2)
+
+The probability of getting 1 heads is less than getting 7 heads:
+
+```{r, echo = TRUE}
+dbinom(1, size = 10, prob = 0.5)
+dbinom(7, size = 10, prob = 0.5)
+```
+
+------------------------------------------------------------------------
+
+# Simulating data for a model
+
+# Probability of capture
+
+Lets say we set are fish for tuna using a rod and reel. Each cast is independent and has a probability $p$ of catch a tuna. We cast the rod $n$ times. Using the binomial distribution we can simulate the number of casts in which we capture tuna and the number of tuna we catch across two fishing trips. We can simulate it two ways for each fishing trip:
+
+```{r, echo = TRUE}
+prob_captura <- 0.2
+ncasts = 20
+
+
+trip1 <- rbinom(ncasts, size = 1, prob = prob_captura)
+trip1
+```
+
+------------------------------------------------------------------------
+
+```{r, echo = TRUE}
+trip2 <- rbinom(1, size = ncasts, prob = prob_captura)
+trip2
+```
+
+------------------------------------------------------------------------
+
+------------------------------------------------------------------------
+
+# Estimation (analytic)
+
+Given the data, we now want to estimate the probability of capturing a tuna $\hat{p}$
+
+Using the binomial likelihood
+
+$$
+L(p|k,n)=\binom{n}{k} \cdot p^kq^{n-k}
+$$
+
+To calculate the analytical solution we can use the log likelihood $log(L)$ or $l$:
+
+$$
+l(p|k,n)=\text{log}\binom{n}{k} +  k*\text{log}(p)+(n-k)*\text{log}(1-p)
+$$
+
+and take the derivative with respect to $p$:
+
+$$
+\frac{dl}{dp}=\frac{k}{p}-\frac{n-p}{1-p}
+$$
+
+and solve for where $\frac{dl}{dp} = 0$
+
+You do it!
+
+------------------------------------------------------------------------
+
+Using the analytic solution we can solve for $\hat{p} = \frac{k}{n}$
+
+```{r, echo = TRUE}
+sum(trip1)/ncasts # P from trip1
+trip2/ncasts # P from trip2
+```
+
+------------------------------------------------------------------------
+
+------------------------------------------------------------------------
+
+# Estimation (analytic)
+
+or combine because they are independent
+
+```{r, echo=TRUE}
+(sum(trip1)+trip2)/(ncasts * 2) # P from both trips
+```
+
+------------------------------------------------------------------------
+
+# Repeated sampling
+
+Repeat the sampling from two trips 10,000 times
+
+```{r, echo = TRUE}
+data <- data.frame(rep = 1:10000, Tuna = NA, P = NA)
+
+for(rep in 1:nrow(data)){
+  data$Tuna[rep] = rbinom(1, size = (ncasts*2), prob = prob_captura)
+  data$P[rep] = data$Tuna[rep]/(ncasts*2)
+}
+
+hist(data$P, breaks = 15, xlab = "p", main = "Rep de pesca")
+abline(v = mean(data$P), col = 2, lwd = 4)
+```
+
+------------------------------------------------------------------------
+
+# Repeated and better sampling
+
+Repeat the above 10,000 times, but increase the number of casts to 200
+
+```{r, echo = TRUE}
+data <- data.frame(rep = 1:10000, Tuna = NA, P = NA)
+ncasts_mas = 200
+
+for(rep in 1:nrow(data)){
+  data$Tuna[rep] = rbinom(1, size = (ncasts_mas*2), prob = prob_captura)
+  data$P[rep] = data$Tuna[rep]/(ncasts_mas*2)
+}
+
+hist(data$P, breaks = 15, xlab = "p", main = "Rep de pesca")
+abline(v = mean(data$P), col = 2, lwd = 4)
+```
+
+------------------------------------------------------------------------
+
+# Numerical estimation (1)
+
+Sometimes the models are complex to where there is not distinct analytic solution is not possible so we can use numeric methods. Numeric methods often try to find the minima of a function and therefore we use the negative log-likelihood $-l$.
+
+Define a function in R that outputs the negative log-likelihood given the data and parameters.
+
+```{r, echo = TRUE}
+nll_fun <- function(par, k, n){
+  nll = -sum(dbinom(k, n, par, log = TRUE))
+  return(nll)
+}
+```
+
+------------------------------------------------------------------------
+
+# Numerical estimation (2)
+
+Plot the negative log-likelihood across values of $\hat{p}$
+
+```{r, echo = TRUE}
+
+# Plot nll acros 
+prob_vec <- seq(0.1, 0.4, by = 0.001)
+nll_vec <- c()
+
+for(i in 1:length(prob_vec)){
+  nll_vec[i] <- nll_fun(prob_vec[i], 
+          k = (sum(trip1)+trip2),
+          n = ncasts * 2)
+}
+
+# nll_vec <- sapply(prob_vec, function(x) nll_fun(x, k = (sum(trip1)+trip2), n = ncasts * 2)))
+
+plot(x = prob_vec, y = nll_vec, ylab = "NLL", xlab = "P")
+```
+
+# Numerical estimation (3)
+
+Use the function `optim` to find the MLE
+
+```{r, echo = TRUE}
+
+opt <- optim(par = 0.1,
+             fn = nll_fun,
+             k = (sum(trip1)+trip2),
+             n = (ncasts * 2),
+             method = "Brent", lower = 0, upper = 1)
+opt$par
+```

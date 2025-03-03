@@ -1,0 +1,4 @@
+"0","chile_bathy <- readRDS(""chile_bathy.RDS"") %>%"
+"0","  st_sf()"
+"2","Error in st_sf(.) : no simple features geometry column present
+"

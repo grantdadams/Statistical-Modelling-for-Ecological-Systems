@@ -1,0 +1,7 @@
+"0","get_density = function(depth,"
+"0","                       best_depth = -1000,"
+"0","                       DepthSigma = 1.5){"
+"0","  exp(-1 * ( log(depth/best_depth) )^2 / DepthSigma ^2)"
+"0","}"
+"0","curve(get_density(x), from = -5000, to = 0, xlab = ""Depth"", ylab = ""Habitat suitability"")"
+"0",""

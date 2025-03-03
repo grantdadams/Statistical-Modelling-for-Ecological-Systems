@@ -1,0 +1,330 @@
+---
+title: "Index Standardization - Simulation"
+author: "Grant Adams"
+format: pptx
+editor: visual
+---
+
+# Simulate Index Standardization
+
+```{r}
+library(marmap)
+library(raster)
+library(stars)
+library(dplyr)
+```
+
+------------------------------------------------------------------------
+
+# Steps
+
+1.  Simulate a population through time
+
+2.  Create a habitat map
+
+3.  Create a habitat suitability function
+
+4.  Distribute the population across space
+
+5.  Sample the population
+
+6.  Fit a GLM
+
+7.  Create index
+
+------------------------------------------------------------------------
+
+# Step 1: Simulate a population
+
+Simulate data following a Schaefer surplus production model
+
+$$
+N_y = N_{y-1} + N_{y-1}*r*\left(1-\frac{N_{y-1}}{K}\right)
+$$
+
+$N_y$ = Numbers in year $y$
+
+$r$ = population growth rate
+
+$K$ = carrying capacity
+
+------------------------------------------------------------------------
+
+```{r, echo = TRUE}
+set.seed(487)
+
+K = 1e6 # Carrying capacity
+R = 0.2 # Growth Rate
+N0 = 5e5
+nyrs = 50
+Rer <- rnorm(nyrs, 0, 0.3) # AR1 error
+
+# - Schaefer model
+N <- N0
+Ryr <- R
+
+for(yr in 2:nyrs){
+  Ryr[yr] = R + 0.5 * Rer[yr-1] + Rer[yr]
+  N[yr] <- (N[yr-1] + Ryr[yr-1] * N[yr-1] * (1 - N[yr-1]/K)) * exp(rnorm(1, 0, 0.05))
+}
+```
+
+------------------------------------------------------------------------
+
+```{r, echo = TRUE}
+# Plot total numbers
+plot(x = 1:nyrs, y = N, xlab = "Year", ylab = "N")
+```
+
+# Step 2: Habitat map
+
+Abundance is a function of depth
+
+```{r, echo = TRUE, eval = FALSE}
+## Get bathymetry
+chile_bathy <- getNOAA.bathy(lon1 = -85, lon2 = -65,
+                             lat1 = -10, lat2 = -60, resolution = 10)
+chile_bathy <- as.raster(chile_bathy)
+chile_bathy[chile_bathy > 0 ] <- NA
+```
+
+------------------------------------------------------------------------
+
+```{r}
+chile_bathy <- readRDS("chile_bathy.RDS")
+raster::plot(chile_bathy)
+```
+
+------------------------------------------------------------------------
+
+```{r, echo = TRUE}
+## Convert to grid
+polygony <- st_make_grid(chile_bathy, square = T, what = "polygons",
+                         cellsize = 1) %>%
+  st_sf()
+
+# Mean depth in grid
+e <- raster::extract(chile_bathy, 
+                     polygony,    
+                     buffer = .5, #  specify a .5 degree radius
+                     fun = mean, # extract the MEAN value from each plot
+                     cellnumbers = TRUE,
+                     sp = TRUE)
+
+# Store values in grid
+polygony <- polygony %>%
+  dplyr::mutate(
+    depth = e$layer, # Depth
+    grid_id = 1:length(polygony$geometry), # Grid ID
+    grid_id = ifelse(depth > -10, NA, grid_id)
+    )
+```
+
+------------------------------------------------------------------------
+
+```{r}
+plot(polygony)
+```
+
+------------------------------------------------------------------------
+
+# Step 3: Habitat suitability
+
+Suitability in cell $a$ is a function of depth:
+
+$$
+S_a = \exp\left(\frac{-log(depth_a/\mu_{depth})^2}{\sigma_{depth}}\right)
+$$
+
+```{r, echo = TRUE}
+get_density = function(depth,
+                       best_depth = -1000,
+                       DepthSigma = 1.5){
+  exp(-1 * ( log(depth/best_depth) )^2 / DepthSigma ^2)
+}
+
+## Plot local density
+polygony <- polygony %>%
+  dplyr::mutate(
+    habitat_suitability = get_density(depth),
+    habitat_suitability = ifelse(depth >= -20, NA, habitat_suitability))
+```
+
+------------------------------------------------------------------------
+
+```{r}
+curve(get_density(x), from = -5000, to = 0, xlab = "Depth", ylab = "Habitat suitability")
+```
+
+------------------------------------------------------------------------
+
+```{r}
+plot(polygony)
+```
+
+# Step 4: Distribute the population
+
+Relative abundance will distribute based on:
+
+$$
+N_{y,a}=N_y*\frac{S_a + \epsilon_{y,a}}{\sum{S_a + \epsilon_{y,a}}}
+$$
+
+```{r, echo = TRUE}
+HabitatSigma <- 0.1 # Random noise around habitat
+
+## Get local abundance across years
+local_abundance <- list()
+
+# Loop around years
+for(i in 1:nyrs){
+  local_abundance[[i]] <- polygony %>%
+    dplyr::mutate(
+      habitat_suitability = habitat_suitability * exp(rnorm(length(habitat_suitability), 0, HabitatSigma)), # Add random noise
+      RelAbund = N[i] * habitat_suitability/sum(habitat_suitability, na.rm = TRUE))
+  
+  names(local_abundance)[i] <- paste0("Year", i)
+}
+```
+
+------------------------------------------------------------------------
+
+```{r}
+tmp <- local_abundance[[1]]
+tmp$Year1 <- local_abundance[[1]]$RelAbund
+tmp$Year2 <- local_abundance[[2]]$RelAbund
+plot(tmp[c("Year1", "Year2")], xlab = "Abundance")
+```
+
+------------------------------------------------------------------------
+
+# Step 5: Sample the population
+
+Annual survey with 50 haul locations $h$
+
+Assume $q = 0.1$
+
+$$
+I_{y,h} \sim \text{Binom}(N_{y,a}, q)
+$$
+
+------------------------------------------------------------------------
+
+```{r, echo = TRUE}
+## Apply annual survey ----
+n_hauls <- 50
+q <- 0.1
+cells <- sample(local_abundance[[1]]$grid_id[which(!is.na(local_abundance[[1]]$grid_id))], n_hauls) # Where to sample
+```
+
+------------------------------------------------------------------------
+
+```{r}
+polygony <- polygony %>%
+  dplyr::mutate(Sample = grid_id %in% cells,
+         Sample = ifelse(is.na(habitat_suitability), NA, Sample))
+plot(polygony[c("depth", "habitat_suitability", "Sample")])
+```
+
+------------------------------------------------------------------------
+
+```{r, echo = TRUE}
+# Sample
+haul_data <- data.frame(Years = NULL, Haul = NULL, CPUE = NULL)
+
+for(i in 1:nyrs){
+  for(j in 1:n_hauls){
+    haul_tmp <- data.frame(Year = i, 
+                           Haul = j, 
+                           Cell = j, 
+                           Depth = local_abundance[[i]]$depth[which(local_abundance[[i]]$grid_id == cells[j])],
+                           CPUE = 
+                             rbinom(n = 1,
+                                    size = round(local_abundance[[i]]$RelAbund[which(local_abundance[[i]]$grid_id == cells[j])]),
+                                    prob = q ))
+    haul_data <- rbind(haul_data, haul_tmp)
+
+  }
+}
+```
+
+------------------------------------------------------------------------
+
+# Step 6: Fit CPUE model
+
+Two models:
+
+`glm(CPUE ~ as.factor(Year), data = haul_data)`
+
+1.  Normal
+
+2.  Poisson
+
+3.  Depth?
+
+4.  Que mas?
+
+------------------------------------------------------------------------
+
+# Model 1 (Normal)
+
+```{r, echo = TRUE}
+mod1 = glm(CPUE ~ as.factor(Year), data = haul_data)
+par(mfrow = c(2, 2), mar = c(3, 2.5, 1.5, 1))
+plot(mod1)
+```
+
+------------------------------------------------------------------------
+
+# Model 2 (Poisson)
+
+```{r, echo = TRUE}
+mod2 = glm(CPUE ~ as.factor(Year), family = poisson(link = "log"), data = haul_data)
+par(mfrow = c(2, 2), mar = c(3, 2.5, 1.5, 1))
+plot(mod2)
+```
+
+------------------------------------------------------------------------
+
+# Model 3 (Poisson w/ depth)
+
+```{r, echo = TRUE}
+mod3 = glm(CPUE ~ as.factor(Year) + Depth + Depth^2, family = poisson(link = "log"), data = haul_data)
+par(mfrow = c(2, 2), mar = c(3, 2.5, 1.5, 1))
+plot(mod3)
+```
+
+------------------------------------------------------------------------
+
+# Model 4 (Poisson w/ location)
+
+```{r, echo = TRUE}
+mod4 = glm(CPUE ~ as.factor(Year) + as.factor(Cell), family = poisson(link = "log"), data = haul_data)
+par(mfrow = c(2, 2), mar = c(3, 2.5, 1.5, 1))
+plot(mod4)
+```
+
+------------------------------------------------------------------------
+
+# Step 7: Create index
+
+```{r, echo = TRUE}
+# Dummy data
+pred_data <- data.frame(Year = 1:nyrs, Cell = 1) 
+pred <- predict(mod4, newdata = pred_data, type = "response", se = TRUE)
+
+# Mean
+pred_data$Index <- pred$fit
+
+# 95% CI
+pred_data$Lower <- pred$fit - pred$se.fit * 1.96
+pred_data$Upper <- pred$fit + pred$se.fit * 1.96
+```
+
+------------------------------------------------------------------------
+
+# How well did we do?
+
+```{r}
+plot(x = N, y = pred_data$Index, ylab = "Index", xlab = "N")
+```

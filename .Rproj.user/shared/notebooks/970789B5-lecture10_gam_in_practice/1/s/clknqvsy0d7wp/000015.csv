@@ -1,0 +1,8 @@
+"0","xk <- 1:4/5               # choose location of 4 knots"
+"0","Xmat <- spl.X(x, xk)         # generate model matrix "
+"0","mod.1 <- lm(wear ~ Xmat - 1) # fit model "
+"0","xp <- 0:100 / 100         # x values for prediction "
+"0","Xp <- spl.X(xp, xk)       # prediction matrix "
+"0",""
+"0","# Plot"
+"0","plot(x, wear, xlab = ""Scaled engine size"", ylab = ""Wear index"")"

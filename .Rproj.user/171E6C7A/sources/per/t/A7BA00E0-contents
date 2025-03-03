@@ -1,0 +1,67 @@
+# https://grantdadams.wordpress.com/von-bertalanffy-in-template-model-builder/
+library(RTMB)
+library(readxl)
+
+datos <- read_excel("datos.xlsx")
+
+# Plot length-at-age
+plot(datos$Edad, datos$`LH (cm)` , xlab = "Age (yr)", ylab = "Length (mm)", pch = 16)
+
+
+###### Write model
+VBGM <- function(parms, dataList) {
+  # - Data
+  Age_i <- dataList$Age_i
+  Length_i <- dataList$Length_i
+
+  # - Parameters
+  Linf <- exp(parms$logLinf) # To keep > 0
+  k <- exp(parms$logk)
+  t0 <- parms$t0
+  h <- parms$h
+  th <- exp(parms$logTH)
+  SD <- exp(parms$logSD)
+
+  # - Likelihood
+  a_t <- 1 - h/(1+(Age_i - th)^2)
+  predicted_length_i = Linf * (1 - exp(-k * a_t * (Age_i - t0)))
+  nll = -sum(dnorm(Length_i, predicted_length_i, SD, TRUE))
+
+  # - Report
+  RTMB::REPORT(predicted_length_i)
+  ADREPORT(Linf);
+  ADREPORT(k);
+  ADREPORT(th);
+  ADREPORT(SD);
+
+  nll
+}
+
+
+###### Fit model
+# Build model objects
+parameters = list(logLinf = log(400), logk = (0.3), t0 = -5, h = 0, logTH = log(15), logSD = 0) # CAREFUL WITH STARTING VALUES
+data = list(Length_i = datos$`LH (cm)`, Age_i = datos$Edad)
+map <- list(h = factor(NA),
+            logTH = factor(NA))
+
+# - Build model
+cmb <- function(f, d) function(p) f(p, d) ## Helper to make data and explicit input
+obj <- MakeADFun(cmb(VBGM, data), parameters)
+
+# Estimate
+obj$hessian <- TRUE
+opt <- nlminb(obj$par, obj$fn, obj$gr)
+opt
+
+# Get uncertainty via Delta method
+rep <- sdreport(obj)
+summ <- as.data.frame(summary(rep))
+summ$Parameter = rownames(summ)
+summ
+
+# Plot
+plot(datos$Edad, datos$`LH (cm)` , xlab = "Age (yr)", ylab = "Length (mm)", pch = 16)
+mle <- as.data.frame(t(summ[,1]))
+colnames(mle) <- summ$Parameter
+curve(mle$Linf[1] * (1 - exp(-mle$k[1] * (1 - mle$h[1]/(1+(x - mle$th[1])^2)) * (x - mle$t0[1]))), from = 0, to = 30, col = 2, lwd = 4, add = TRUE)

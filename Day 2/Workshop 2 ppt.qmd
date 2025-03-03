@@ -1,0 +1,352 @@
+---
+title: "Workshop 2"
+author: "Grant Adams"
+format: pptx
+editor: visual
+---
+
+# Simulating data
+
+# Normal distribution (1)
+
+The normal distribution is defined by
+
+$$
+p(x|\mu,\sigma) = \prod \frac{1}{\sqrt{2 \pi \sigma^2}}e^{-\frac{(x - \mu)^2}{2 \sigma^2}}
+$$
+
+where $x$ are the observations, $\mu$ is the mean, and $\sigma$ is the standard deviation. Data can be simulated from a normal distribution using `rnorm` and we can plot the distribution of data using the `hist` function.
+
+```{r, echo = TRUE}
+data <- rnorm(n = 100, mean = 6, sd = 1)
+hist(data)
+```
+
+------------------------------------------------------------------------
+
+# Normal distribution (2)
+
+The probability density is specified by `dnorm`. The probability of getting 0 in the above distribution is very low compared to the probability of getting a 6:
+
+```{r, echo = TRUE}
+dnorm(0, mean = 6, sd = 1)
+dnorm(6, mean = 6, sd = 1)
+```
+
+------------------------------------------------------------------------
+
+# Simulating data for a model (1)
+
+# Simulating weight-at-length (1)
+
+We can simulate data for a model by first defining the function relating the data to the parameters $f(\theta)$. When relating weight and length of fish, a common model used is the power function:
+
+$$
+Peso = \alpha * Longitud ^{\beta}
+$$
+
+The model can be realized by taking the log:
+
+$$
+log(Peso) = log(\alpha)+\beta*log(Longitud)
+$$
+
+------------------------------------------------------------------------
+
+# Simulating weight-at-length (2)
+
+We can simulate random lengths of 100 fish using the `runif` function
+
+```{r, echo = TRUE}
+nobs = 500
+longitud <- runif(nobs, min = 5, max = 130)
+beta = 3
+alpha = 1e-05 # kg per cm^3
+log_peso <- log(alpha) + beta * log(longitud)
+peso = exp(log_peso)
+```
+
+------------------------------------------------------------------------
+
+# Simulating weight-at-length (3)
+
+The data can be plot
+
+```{r, echo = TRUE}
+plot(x = longitud, y = peso)
+curve(alpha*x^beta, from = 5, to = 130, add = TRUE, col = 2)
+```
+
+------------------------------------------------------------------------
+
+# Simulating weight-at-length (4)
+
+This does not include sampling error! We can add lognormal sampling error using `rnorm` to the log function:
+
+The model can be realized by taking the log:
+
+$$
+log(Peso) = log(\alpha)+\beta*log(Longitud) + \epsilon
+$$
+
+$$
+\epsilon \sim N(0, \sigma)
+$$
+
+------------------------------------------------------------------------
+
+# `for` loops for simulating
+
+```{r, echo = TRUE}
+log_peso_obs <- c() # empty vector
+peso_obs <- c()     # empty vector
+
+# Loop through th vector from 1 until length of `log_peso`
+for(i in 1:length(log_peso)){
+  log_peso_obs[i] = log_peso[i] + rnorm(1, 0, sd = 0.2)
+  peso_obs[i] = exp(log_peso_obs[i])
+}
+
+# log_peso_obs = exp(log_peso + rnorm(100, 0, sd = 0.2))
+
+```
+
+------------------------------------------------------------------------
+
+# Simulating weight-at-length (6)
+
+The data can be plot
+
+```{r, echo = TRUE}
+plot(x = longitud, y = peso_obs, pch = 14)
+curve(alpha*x^beta, from = 5, to = 130, add = TRUE, col = 2)
+```
+
+------------------------------------------------------------------------
+
+# Fitting to simulated data
+
+Use the `lm` function to fit to the weight-at-length
+
+```{r, echo = TRUE}
+mod <- lm(log(peso_obs) ~ log(longitud))
+summary(mod)
+```
+
+------------------------------------------------------------------------
+
+# Fitting to observed data
+
+# Loading data
+
+Average weight of chinook salmon in Argentina from:
+
+Soto, D., I. Arismendi, C. Di Prinzio, and F. Jara. 2007. Establishment of Chinook Salmon (Oncorhynchus tshawytscha) in Pacific basins of southern South America and its potential ecosystem implications. Revista Chilena d Historia Natural, 80:81-98. \[http://www.scielo.cl/pdf/rchnat/v80n1/art07.pdf.\]
+
+ILook at what the data structure is:
+
+```{r, eacho = TRUE}
+chinook <- read.csv("ChinookArg.csv")
+head(chinook)
+```
+
+------------------------------------------------------------------------
+
+```{r, echo = TRUE}
+hist(chinook$w, xlab = "Peso (kg)", main = NA)
+```
+
+------------------------------------------------------------------------
+
+# Initial plots
+
+```{r, eacho = TRUE}
+par(mfrow = c(1,2))
+plot(y = chinook$w, x = chinook$tl, ylab = "Peso", xlab = "Longitud")
+boxplot(w ~ loc, data = chinook, xlab = "Loc", ylab = "Peso")
+```
+
+------------------------------------------------------------------------
+
+# Fitting to observed data (1)
+
+Use the `lm` function to fit to the weight-at-length
+
+```{r, echo = TRUE}
+mod <- lm(log(w) ~ log(tl), data = chinook)
+summary(mod)
+```
+
+------------------------------------------------------------------------
+
+# Fitting to observed data (2)
+
+Custom function
+
+```{r, echo = TRUE}
+lm_fun <- function(pars, y, x){
+  alpha <- pars[1]
+  beta <- pars[2]
+  sigma <- exp(pars[3]) # Exp to keep positive
+  
+  nll = -sum(dnorm(y, alpha + beta * x, sigma, log = TRUE
+  ))
+  return(nll)
+}
+
+fit <- nlminb(start = c(1,2,1), lm_fun, y = log(chinook$w), x = log(chinook$tl))
+fit$par
+```
+
+------------------------------------------------------------------------
+
+# Diagnostics
+
+Extract model coefficients using `mod$coefficients` to get $log(\alpha)$ and $\beta$ and plot
+
+```{r, echo = TRUE}
+# En log
+par(mfrow = c(1,2))
+plot(y = log(chinook$w), x = log(chinook$tl), ylab = "log Peso", xlab = "log Longitud")
+abline(mod)
+
+# En natural
+alpha_hat = exp(mod$coefficients[1])
+beta_hat = mod$coefficients[2]
+
+plot(y = chinook$w, x = chinook$tl, ylab = "Peso", xlab = "Longitud")
+curve(alpha_hat * x^ beta_hat, from = 5, to = 130, add = TRUE, col = 2)
+```
+
+# Diagnostic plots
+
+```{r, echo = TRUE}
+plot(mod)
+```
+
+------------------------------------------------------------------------
+
+# Uncertainty (1)
+
+Uncertainty of the parameters can extracted using `summary`
+
+95% confidence interval $\theta \pm 1.96 SE$
+
+```{r, echo = TRUE}
+summ <- summary(mod)
+summ
+```
+
+------------------------------------------------------------------------
+
+# Uncertainty (2)
+
+95% CI of $log(\alpha)$ and $\beta$
+
+```{r}
+CI2.5 <- summ$coefficients[,1] + summ$coefficients[,2] * 1.96
+CI97.5 <- summ$coefficients[,1] - summ$coefficients[,2] * 1.96
+```
+
+------------------------------------------------------------------------
+
+# Uncertainty (3)
+
+What if we want uncertainty around $\alpha$ instead of $log(\alpha)$?
+
+------------------------------------------------------------------------
+
+# Uncertainty (4)
+
+Can use:
+
+-   Simulation
+
+-   Bootstrap
+
+-   Delta method
+
+------------------------------------------------------------------------
+
+# Bootstrap (1)
+
+Resampling the data with replacement and fitting the model
+
+Summarize model estimates to get uncertainty
+
+```{r, echo = TRUE}
+nboot = 10000
+pars <- data.frame(Alpha = rep(0, nboot), Beta = rep(0, nboot))
+
+for(i in 1:nboot){
+  rows_boot <- sample(1:nobs, nobs, replace = TRUE)
+  data <- data.frame(w = peso_obs[rows_boot], tl = longitud[rows_boot])
+  mod_tmp <- lm(log(w) ~ log(tl), data = data)
+  
+  pars$Alpha[i] <- exp(mod_tmp$coefficients[1])
+  pars$Beta[i] <- mod_tmp$coefficients[2]
+}
+```
+
+------------------------------------------------------------------------
+
+# Bootstrap (2)
+
+Get 95% CI and mean
+
+```{r, exho = TRUE}
+par(mfrow = c(1, 2))
+# Alpha
+hist(pars$Alpha, xlab = "Alpha", main = NA)
+abline(v = mean(pars$Alpha), col = 2) # Mean
+
+abline(v = mean(pars$Alpha) - 1.96 * sd(pars$Alpha), col = 3)
+abline(v = mean(pars$Alpha) + 1.96 * sd(pars$Alpha), col = 3)
+
+
+# Beta
+hist(pars$Beta, xlab = "Beta", main = NA)
+abline(v = mean(pars$Beta), col = 2) # Mean
+
+abline(v = mean(pars$Beta) - 1.96 * sd(pars$Beta), col = 3)
+abline(v = mean(pars$Beta) + 1.96 * sd(pars$Beta), col = 3)
+
+```
+
+------------------------------------------------------------------------
+
+# Simulation (1)
+
+We can simulate from the variance covariance and transform
+
+```{r, echo = TRUE}
+library(MASS)
+sim_pars <- mvrnorm(n = 10000, mu = mod$coefficients, Sigma = vcov(mod))
+sim_pars <- as.data.frame(sim_pars)
+colnames(sim_pars) <- c("log_alpha", "Beta")
+sim_pars$Alpha <- exp(sim_pars$log_alpha)
+head(sim_pars)
+```
+
+------------------------------------------------------------------------
+
+# Simulation (2)
+
+```{r, echo = TRUE}
+
+par(mfrow = c(1, 2))
+# Alpha
+hist(sim_pars$Alpha, xlab = "Alpha", main = NA)
+abline(v = mean(sim_pars$Alpha), col = 2) # Mean
+
+abline(v = mean(sim_pars$Alpha) - 1.96 * sd(sim_pars$Alpha), col = 3)
+abline(v = mean(sim_pars$Alpha) + 1.96 * sd(sim_pars$Alpha), col = 3)
+
+
+# Beta
+hist(sim_pars$Beta, xlab = "Beta", main = NA)
+abline(v = mean(sim_pars$Beta), col = 2) # Mean
+
+abline(v = mean(sim_pars$Beta) - 1.96 * sd(sim_pars$Beta), col = 3)
+abline(v = mean(sim_pars$Beta) + 1.96 * sd(sim_pars$Beta), col = 3)
+```

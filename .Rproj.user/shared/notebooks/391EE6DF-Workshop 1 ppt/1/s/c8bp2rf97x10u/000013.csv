@@ -1,0 +1,4 @@
+"0","nll_fun <- function(par, k, n){"
+"0","  nll = -sum(dbinom(k, n, par, log = TRUE))"
+"0","  return(nll)"
+"0","}"

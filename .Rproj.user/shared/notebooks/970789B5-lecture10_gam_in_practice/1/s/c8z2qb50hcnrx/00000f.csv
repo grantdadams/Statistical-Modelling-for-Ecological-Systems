@@ -1,0 +1,2 @@
+"0","# Fit model"
+"0","mod <- lm(wear ~ x + I(x^2) + I(x^3))"
